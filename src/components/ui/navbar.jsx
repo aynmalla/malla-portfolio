@@ -1,8 +1,9 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useLayoutEffect } from "react";
 import { motion } from "framer-motion";
 
 export function Navbar() {
   const [activeSection, setActiveSection] = useState("home");
+  const [hoveredSection, setHoveredSection] = useState(null);
   const [position, setPosition] = useState({ left: 0, width: 0, opacity: 0 });
   const [showNavbar, setShowNavbar] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
@@ -53,17 +54,44 @@ export function Navbar() {
     return () => observer.disconnect();
   }, []);
 
-  // 3. Menyesuaikan posisi cursor berdasarkan seksi aktif
-  useEffect(() => {
-    if (!navRef.current) return;
-    const activeItem = navRef.current.querySelector(`[data-section="${activeSection}"]`);
-    if (activeItem) {
-      const { width, offsetLeft } = activeItem;
-      setPosition({ width, opacity: 1, left: offsetLeft });
-    }
-  }, [activeSection]);
+  // The hovered item previews the pill; when there is no hover, the active section owns it.
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
 
-  const handleTabClick = (id) => {
+    const updatePosition = () => {
+      const sectionId = hoveredSection ?? activeSection;
+      const item = nav.querySelector(`[data-section="${sectionId}"]`);
+      if (!item) return;
+
+      const navRect = nav.getBoundingClientRect();
+      const itemRect = item.getBoundingClientRect();
+      setPosition({
+        width: itemRect.width,
+        opacity: 1,
+        left: itemRect.left - navRect.left,
+      });
+    };
+
+    updatePosition();
+    const resizeObserver = new ResizeObserver(updatePosition);
+    resizeObserver.observe(nav);
+    nav.querySelectorAll("[data-section]").forEach((item) => resizeObserver.observe(item));
+
+    return () => resizeObserver.disconnect();
+  }, [activeSection, hoveredSection]);
+
+  const handleTabClick = (event, id) => {
+    const target = document.getElementById(id);
+    if (!target) return;
+
+    event.preventDefault();
+    window.history.pushState(null, "", `#${id}`);
+    window.scrollTo({
+      top: window.scrollY + target.getBoundingClientRect().top,
+      behavior: "smooth",
+    });
+
     // Paksa navbar untuk tetap muncul dan kunci deteksi scroll sejenak
     isClickScrolling.current = true;
     setShowNavbar(true);
@@ -93,20 +121,17 @@ export function Navbar() {
       <ul
         ref={navRef}
         className="relative mx-auto flex w-fit gap-1 rounded-full border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-2 shadow-2xl"
-        onMouseLeave={() => {
-          const activeItem = navRef.current.querySelector(`[data-section="${activeSection}"]`);
-          if (activeItem) {
-            setPosition({ width: activeItem.offsetWidth, opacity: 1, left: activeItem.offsetLeft });
-          }
-        }}
+        onMouseLeave={() => setHoveredSection(null)}
       >
         {navItems.map((item) => (
           <Tab
             key={item.id}
             id={item.id}
             href={item.href}
-            setPosition={setPosition}
-            onClick={() => handleTabClick(item.id)}
+            active={activeSection === item.id}
+            highlighted={hoveredSection === item.id || (hoveredSection === null && activeSection === item.id)}
+            onHover={() => setHoveredSection(item.id)}
+            onClick={(event) => handleTabClick(event, item.id)}
           >
             {item.label}
           </Tab>
@@ -118,25 +143,17 @@ export function Navbar() {
   );
 }
 
-const Tab = ({ children, setPosition, href, id, onClick }) => {
+const Tab = ({ children, onHover, href, id, active, highlighted, onClick }) => {
   const ref = useRef(null);
   
   return (
     <li
       ref={ref}
       data-section={id}
-      onMouseEnter={() => {
-        if (!ref.current) return;
-        const { width } = ref.current.getBoundingClientRect();
-        setPosition({
-          width,
-          opacity: 1,
-          left: ref.current.offsetLeft,
-        });
-      }}
-      className="relative z-10 block cursor-pointer px-4 py-2 text-xs uppercase font-extrabold tracking-wide text-slate-700 dark:text-slate-300 hover:text-white transition-colors duration-200 md:px-6 md:py-3 md:text-sm"
+      onMouseEnter={onHover}
+      className={`relative z-10 block cursor-pointer px-4 py-2 text-xs uppercase font-extrabold tracking-wide transition-colors duration-200 md:px-6 md:py-3 md:text-sm ${highlighted ? "text-white" : "text-slate-700 dark:text-slate-300 hover:text-white"}`}
     >
-      <a href={href} onClick={onClick} className="block w-full h-full">{children}</a>
+      <a href={href} onClick={onClick} aria-current={active ? "location" : undefined} className="block w-full h-full">{children}</a>
     </li>
   );
 };

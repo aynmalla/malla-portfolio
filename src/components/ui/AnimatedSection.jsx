@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
 
-export function AnimatedSection({ children, className = "" }) {
+export function AnimatedSection({ children, className = "", id }) {
   return (
     <motion.div
       initial="hidden"
       whileInView="visible"
       viewport={{ once: true, margin: "-100px" }}
+      id={id}
       variants={{
         hidden: {},
         visible: {
